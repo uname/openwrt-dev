@@ -1,2 +1,2 @@
 # openwrt-dev
-一些OpenWRT开发相关的资料
+涓�浜汷penWRT寮�鍙戠浉鍏崇殑璧勬枡
