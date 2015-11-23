@@ -1,0 +1,8 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2008 OpenWrt.org
+
+START=96
+
+start() {
+    socat tcp-listen:2001,reuseaddr,fork file:/dev/ttyATH0,nonblock,raw,echo=0,waitlock=/var/run/tty2,b57600 &
+}

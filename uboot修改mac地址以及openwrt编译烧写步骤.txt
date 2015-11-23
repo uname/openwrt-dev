@@ -1,0 +1,186 @@
+一、uboot中修改MAC地址步骤:
+
+1.将openwrt串口引出，连接到PC串口工具；
+
+2.给openwrt上电，从串口键入Ctrl+C，进入uboot命令行；
+
+3.从命令行输入：progmac XX-XX-XX-XX-XX-XX
+
+例如,progmac 00-23-45-67-89-ab
+
+回车后可以看到将mac写入flash中的对应位置的信息，输入autoboot(reset)命令可继续引导系统。
+
+mac地址分配：
+
+sixi: 00-23-45-67-89-a0
+
+binny: 00-23-45-67-89-a2
+
+mick: 00-23-45-67-89-a4
+
+brave: 00-23-45-67-89-a6
+
+apache: 00-23-45-67-89-a8
+
+二、openwrt编译步骤
+
+1.准备环境：
+
+一台能上外网的Linux机器（或虚拟机），用root用户安装以下依赖工具和库：
+
+sudo apt-get install gcc
+sudo apt-get install g++
+sudo apt-get install binutils
+sudo apt-get install patch
+sudo apt-get install bzip2
+sudo apt-get install flex
+sudo apt-get install bison
+sudo apt-get install make
+sudo apt-get install autoconf
+sudo apt-get install gettext
+sudo apt-get install unzip
+sudo apt-get install subversion
+sudo apt-get install libncurses5-dev
+sudo apt-get install ncurses-term
+sudo apt-get install zlib1g-dev
+sudo apt-get install gawk
+sudo apt-get install git-core
+sudo apt-get install libz-dev
+
+
+2.新建目录，下载openwrt源码
+
+openwrt官网上有多个版本，trank(开发版本，不稳定版） backfile（稳定版）以及barrier_breaker.
+
+水星路由器采用barrier_breaker:
+
+git clone git://git.openwrt.org/14.07/openwrt.git
+
+svn co svn://svn.openwrt.org/openwrt/braches/barrier_breaker
+
+
+3.下载feeds
+
+Feeds是openwrt使用的软件包套件，主要有packeges（路由器基础软件）, luci（GUI界面），下载之前可以查看feeds.conf.default
+
+文件检查哪些软件包包含在环境中。
+
+
+进入openwrt根目录，开始下载，使用：
+
+./scripts/feeds update -a
+
+安装feeds包，只有安装之后，在后面的make menuconfig时，才可以对相关配置进行勾选。
+
+ ./scripts/feeds install -a
+
+如果更新了feeds的配置文件，需要添加新的软件包用于生成系统。只需进行重复操作：
+
+./scripts/feeds update -a
+
+./scripts/feeds install -a
+
+
+4.进行配置：
+
+首先执行 make defconfig 来生成默认配置
+
+然后使用 make menuconfig 来选择配置：
+
+根据硬件型号来选择编译目标：
+
+如 ： Target System （Atheros AR&XXX/AR9XXX）
+      Target Profile (TP-LINK TL-WR703N)
+
+其他选项，如Luci根据实际需要来选择（通过空格键），[*]表示编译且安装到firmware中，[M]编译但不安装到firware中，
+
+退出时保存配置。
+
+如特别需要裁剪内核，可用： make kernel_menuconfig
+
+
+5.编译
+
+（1）简单明了：make
+
+（2）可以指定多线程编译提高速度： make -j 3
+
+（3）如果需要分析编译报错信息: make V=99 2>&1 |tee build.log |grep -i error 
+  
+（4）编译单独软件包：make packege/xx/compile
+
+
+
+6. 生成镜像位置
+
+编译完成后源码根目录下会生成bin目录。
+
+
+
+7.清理
+
+make clean 清理编译生成的文件。
+
+make distclean 清理下载的软件包，配置文件，feed的内容等.
+
+
+注意：编译过程中需要通过官网下载很多相关的软件包，所以必须保证能够顺利连上外网，第一次编译一般需要3-4小时。
+
+
+			
+三、编译U-boot
+
+在第二部分编译openwrt中. 在make menuconfig配置阶段，如果选中BOOT Loaders 选项，在bin目录下会生成uboot镜像，但是由于版本较新，
+
+生成的uboot镜像太大，超过了默认的u-boot分区大小，因此需要单独下载u-boot来进行编译：
+
+https://github.com/pepe2k/u-boot_mod
+
+
+1.设置交叉编译器CROSS_COMPILE
+
+将编译openwrt生成的交叉编译器路径添加到环境变量中， 并修改u_boot顶层目录中Make的CROSS_COMPILE=mips-openwrt-linux-
+
+
+2.修改Makefile中的CONFIG_BOOTDELAY选项来改变u-boot启动等待串口输入时间（可选）
+
+
+3.编译指定目标系统的U-Boot镜像
+
+make tplink_wr703n
+
+
+
+四、烧写
+
+
+烧写可以通过界面烧写，也可以通过串口进入UBOOT命令行烧写：
+
+1.界面烧写
+
+（1）网线直连PC和路由器
+
+（2）长按路由器reset键直到指示灯连续闪烁3次停止
+
+（2）浏览器192.168.1.1界面，选择烧写镜像，上传，烧写，切记烧写阶段不要断电
+
+2.命令行烧写
+
+命令行烧写需要明确知道目标系统的分区情况
+
+（1）网线直连PC和路由器，设置PC网络192.168.1.2
+
+（2）PC安装tftp服务器，并将烧写进项放入tftp路径中；
+
+（3）串口进入u-boot命令行,设置tftp服务器网络；
+
+  setenv ip 192.168.1.1
+
+  setenv serverip 192.168.1.2
+
+(4) 刷uboot:(根据分区信息烧写，其他分区类似)
+
+tftp 0x80000000 uboot.bin
+erase 0x9f000000 +0x10000
+cp.b 0x80000000 0x9f000000 0x10000
+

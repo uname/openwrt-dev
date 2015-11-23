@@ -1,0 +1,200 @@
+一、openwrt应用开发
+
+OpenWrt上面应用程序开发有两种方式, 一种是利用OpenWrt SDK, 一种是利用OpenWrt源码.
+
+在编译OpenWrt系统的make menuconfig中将SDK选项选上，会生成OpenWrt SDK.
+
+采用SDK 开发步骤：
+
+1.获取SDK并解压：OpenWrt-SDK-ar71xx-for-linux-x86_64-gcc-4.8-linaro_uClibc-0.9.33.2.tar.bz2
+
+假设SDK路径为${SDK}
+
+2.以helloworld工程为例说明，步骤如下：
+
+   cd ${SDK}/package
+   mkdir helloworld
+   cd helloworld
+   vim Makefile   #这个Makefile可作为模板
+
+====================================================================================
+include $(TOPDIR)/rules.mk 
+
+# Name and release number of this package 
+PKG_NAME:=helloworld 
+PKG_RELEASE:=1 
+
+
+PKG_BUILD_DIR := $(BUILD_DIR)/$(PKG_NAME)
+include $(INCLUDE_DIR)/package.mk
+
+
+define Package/helloworld
+    SECTION:=utils
+    CATEGORY:=Utilities
+    DEPENDS:=+libgcc +libc
+    TITLE:=Helloworld — prints a snarky message
+endef 
+
+define Package/helloworld/description
+        If you can’t figure out what this program does, you’re probably
+        brain-dead and need immediate medical attention.
+endef 
+
+
+define Build/Prepare
+    mkdir -p $(PKG_BUILD_DIR)
+    $(CP) ./files/* $(PKG_BUILD_DIR)/
+endef 
+
+
+define Package/helloworld/install
+    $(INSTALL_DIR) $(1)/bin
+    $(INSTALL_BIN) $(PKG_BUILD_DIR)/helloworld $(1)/bin/
+endef 
+
+
+$(eval $(call BuildPackage,helloworld))
+
+======================================================================================
+
+
+    mkdir files     #创建源码目录
+
+    cd files    
+
+    vim helloworld.c #编写helloworld源码
+
+======================================================================================
+
+#include<stdio.h>
+int main(void)
+{
+    printf(“Hello, world, why won’t my code compile?\n\n”); 
+    return 0;
+}
+=======================================================================================
+  
+  vim Makefile     #编写Makfile
+
+=======================================================================================
+
+helloworld: helloworld.o 
+    $(CC) $(LDFLAGS) helloworld.o -o helloworld
+
+helloworld.o: helloworld.c 
+    $(CC) $(CFLAGS) -c helloworld.c 
+
+clean:
+    rm *.o helloworld
+========================================================================================
+
+ cd ../../   #回到SDK根目录编译
+
+整个目录结构如下：
+ 
+sdk--package--helloworld--|--Makefile
+	                  |--files--|--hellowrold.c
+				    |--Makefile
+
+编译：make V=s
+
+debug选项打开方法有如下几种：
+
+1.在${SDK}/package/helloworld/Makefile中添加 TARGET_CFLAGS += -ggdb3
+           
+2. make CONFIG_DEBUG=y
+
+
+二. OpenWrt远程调试
+
+1. 在make menuconfig阶段，需要选中:
+Development->gdbserver
+Advanced configuration option(for developers)->Toolchain Options->Build gdb
+
+2. 以helloworld为例，远程调试步骤如下：
+
+a.启动目标机上的待调试程序
+
+首先加载并启动编译好的OpenWRT系统:
+
+gdbserver <local_IP>:<port>  /usr/bin/helloworld
+
+b. 启动宿主机gdb
+
+有两种方法：
+
+首先修复一个bug:
+cd ${SDK}/staging_dir/${target-arch}/root-ar71xx ；ln -s ${SDK}/staging_dir/${toolchain-arch}/lib lib
+
+方法一：
+
+首先修复一个bug:
+cd ${SDK}/staging_dir/${target-arch}/root-ar71xx ；ln -s ${SDK}/staging_dir/${toolchain-arch}/lib lib
+
+在${SDK} 根目录下执行：
+
+./script/remote-gdb <target_IP>:<port> staging_dir/${target-arch}/root-ar71xx/usr/bin/helloworld
+
+方法二：
+
+在${SDK} 根目录直接启动gdb:
+
+./${SDK}/staging_dir/${toolchain-arch}/bin/mips-openwrt-linux-*-gdb
+
+gdb 命令行执行：
+
+(gdb） set sysroot staging_dir/${target-arch}/root-ar71xx
+
+(gdb)  file staging_dir/${target-arch}/root-ar71xx/usr/bin/helloworld
+
+(gdb)  target remote <target_IP>:<port>
+
+
+注意，目标板上的helloworld是stripped，主机上的helloworld是unstripped.
+
+
+
+
+
+三、GDB调试与符号表分离的程序或动态库
+
+1.创建分离的调试符号文件：
+objcopy --only-keep-debug "${tostripfile}" "${debugdir}/${debugfile}"
+
+2.去掉调试符号:
+strip --strip-debug --strip-unneeded "${tostripfile}"
+
+3.指定调试符号文件名：
+objcopy --add-gnu-debuglink="${debugdir}/${debugfile}" "${tostripfile}"
+
+会将符号文件名和该文件的CRC校验码添加到 .gun_debuglink 节中， 查看命令如下：
+
+
+objdump -s -j .gnu_debuglink ${tostripfile}
+
+
+4. gnu符号表默认搜索路径：
+
+${exe_dir}/${debugfile}
+${exe_dir}/.debug/${debugfile}
+
+${debug-file-directory}/${tostripfile}/${debugfile}
+${debug-file-directory}//${tostripfile}/${debugfile}
+
+
+举例：假设 /home/test_dir/test 可执行程序的符号文件名为test.debug, gdb的全局搜索路径debug-file-directory=/usr/lib/debug，
+
+那么执行：gdb /home/test_dir/test 命令， 符号文件搜索路径为：
+
+/home/test_dir/test.debug
+/home/test_dir/.debug/test.debug
+/usr/lib/debug/home/test_dir/test.debug
+/usr/lib/debug//home/test_dir/test.debug
+
+
+5. 手动指定符号文件搜索路径：
+gdb 启动时指定： gdb -e ${tostripfile} -S ${debugfile}
+gdb 命令：symbol-file  ${debugfile}
+
+
